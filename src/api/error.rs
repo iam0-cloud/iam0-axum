@@ -2,7 +2,21 @@ use axum::extract::*;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-/// Common error type used throughout the http API compatible with anyhow
+#[derive(thiserror::Error, Debug)]
+pub enum ApiError {
+    #[error("the requested role doesn't exist")]
+    UnknownRole,
+}
+
+impl ApiError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::UnknownRole => StatusCode::BAD_REQUEST,
+        }
+    }
+}
+
+/// Common error type used throughout the http handlers compatible with anyhow, sqlx
 /// and axum
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -14,6 +28,9 @@ pub enum Error {
 
     #[error("resource not found")]
     NotFound,
+
+    #[error("api error")]
+    Api(#[from] ApiError),
 
     /// Automatically return '500 Internal Server Error' on a 'sqlx::Error'
     /// without context for security reasons
@@ -38,7 +55,8 @@ impl Error {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
-            Self::Sqlx(_) | Self::Anyhow(_) => StatusCode::INTERNAL_SERVER_ERROR 
+            Self::Sqlx(_) | Self::Anyhow(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Api(api_error) => api_error.status_code(),
         }
     }
 }

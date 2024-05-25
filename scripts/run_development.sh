@@ -1,7 +1,10 @@
 #!/bin/sh
 
 cleanup() {
-    rm .env development.db*
+    rm .env
+    # comment this while dev on a specific feature if you
+    # want your lsp to not detect errors, while working on sql keep it
+    #rm development.db*
 }
 
 ln -s .env.development .env
