@@ -1,0 +1,42 @@
+[package]
+name = "im0-axum"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4.13"
+tower-http = { version = "0.5.2", features = ["fs"] }
+
+# Error management
+anyhow = "1"
+thiserror = "1"
+
+# Configuration
+clap = { version = "4.5.4", features = ["env", "derive"] }
+dotenv = "0.15.0"
+
+# Tracing/Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"] }
+tracing-log = "0.2.0"
+
+# Data management
+serde =  { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4.38", features = ["serde"] }
+
+# Database
+sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-rustls", "chrono"] }
+
+# Im0
+iam0-core = { git = "https://github.com/iam0-cloud/iam0-core.git", rev = "ed687fda10a6dbbb98ea2f0e3de946c54a793166" }
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+
+

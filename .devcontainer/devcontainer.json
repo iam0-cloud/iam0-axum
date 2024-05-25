@@ -1,0 +1,6 @@
+{
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "dev",
+    "workspaceFolder": "/workspace",
+    "postCreateCommand": "sh scripts/create.sh"
+}
