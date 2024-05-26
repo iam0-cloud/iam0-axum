@@ -64,7 +64,6 @@ struct UserRegisterRequest {
     roles: Option<Vec<String>>
 }
 
-#[axum::debug_handler]
 async fn register_new_user(
     Extension(ClientId(client_id)): Extension<ClientId>,
     State(AppState { db_pool, .. }): State<AppState>,
@@ -133,6 +132,64 @@ mod tests {
         assert_eq!(
             parts.status,
             http::StatusCode::OK
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn register_new_user_unknown_client() -> anyhow::Result<()> {
+        let req = Request::builder()
+        .method(http::Method::POST)
+        .uri("/api/v1/users?email=user3@email.com&public_key=zzz")
+        .header(http::header::AUTHORIZATION, "Bearer invalid_secret")
+        .body(axum::body::Body::empty())?;
+    
+        let res = build_app().await.oneshot(req).await?;
+        let (parts, _) = res.into_parts();
+
+        assert_eq!(
+            parts.status,
+            http::StatusCode::UNAUTHORIZED
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn missing_api_key() -> anyhow::Result<()> {
+        // Missing token
+        let req = Request::builder()
+            .method(http::Method::POST)
+            .uri("/api/v1/users?email=user3@email.com&public_key=zzz")
+            .body(axum::body::Body::empty())?;
+
+        let res = build_app().await.oneshot(req).await?;
+        let (parts, _) = res.into_parts();
+
+        assert_eq!(
+            parts.status,
+            http::StatusCode::UNAUTHORIZED
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn invalid_api_key() -> anyhow::Result<()> {
+        // Missing bearer
+        let req = Request::builder()
+            .method(http::Method::POST)
+            .uri("/api/v1/users?email=user3@email.com&public_key=zzz")
+            .header(http::header::AUTHORIZATION, "super_secret")
+            .body(axum::body::Body::empty())?;
+
+        let res = build_app().await.oneshot(req).await?;
+        let (parts, _) = res.into_parts();
+
+        assert_eq!(
+            parts.status,
+            http::StatusCode::BAD_REQUEST
         );
 
         Ok(())

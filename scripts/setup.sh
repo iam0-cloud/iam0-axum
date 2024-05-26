@@ -1,0 +1,1 @@
+ln -s .env.development .env
