@@ -2,8 +2,8 @@
 create table if not exists clients (
     client_id       integer primary key autoincrement,
 
-    company_name    varchar(255) not null,
-    email           varchar(255) unique not null,
+    company_name    varchar(256) not null,
+    email           varchar(256) unique not null,
     api_key         varchar(64) unique not null
 );
 

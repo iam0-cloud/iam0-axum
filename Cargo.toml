@@ -31,8 +31,9 @@ chrono = { version = "0.4.38", features = ["serde"] }
 # Database
 sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-rustls", "chrono"] }
 
-# Im0
+# Crypto / ZKP related
 iam0-core = { git = "https://github.com/iam0-cloud/iam0-core.git", rev = "ed687fda10a6dbbb98ea2f0e3de946c54a793166" }
+p256 = { version = "0.13.2", features = ["serde"] }
 
 [profile.dev.package."*"]
 opt-level = 2

@@ -3,13 +3,16 @@ use axum::response::*;
 use axum::routing::*;
 use axum::extract::*;
 use axum::http;
+use anyhow::Context;
+use p256::elliptic_curve::sec1::FromEncodedPoint;
 
 use crate::app_state::AppState;
 use crate::api::error::*;
 
 pub fn handlers(state: AppState) -> axum::Router {
     axum::Router::new()
-        .route("/api/v1/users", post(register_new_user))
+        .route("/api/v1/register", post(register_new_user))
+        .route("/api/v1/login", post(user_login))
         .layer(axum::middleware::from_fn_with_state(state.clone(), api_auth)) 
         .with_state(state)
 }
@@ -59,6 +62,7 @@ async fn api_auth(
 
 #[derive(serde::Deserialize)]
 struct UserRegisterRequest {
+    username: String,
     email: String,
     public_key: String,
     roles: Option<Vec<String>>
@@ -68,6 +72,7 @@ async fn register_new_user(
     Extension(ClientId(client_id)): Extension<ClientId>,
     State(AppState { db_pool, .. }): State<AppState>,
     Query(UserRegisterRequest {
+        username,
         email,
         public_key,
         roles
@@ -108,6 +113,77 @@ async fn register_new_user(
     ).into_response())
 }
 
+#[derive(serde::Deserialize)]
+struct UserLoginRequest {
+    email: Option<String>,
+    username: Option<String>,
+    proof: p256::Scalar,
+    commitment: p256::AffinePoint,
+
+    /// Signed username/email
+    payload: String,
+}
+
+async fn user_login(
+    Extension(ClientId(client_id)): Extension<ClientId>,
+    State(AppState { db_pool, .. }): State<AppState>,
+    Query(UserLoginRequest { 
+        email,
+        username,
+        commitment,
+        proof,
+        payload 
+    }): Query<UserLoginRequest>
+) -> Result<Response, Error> {
+    let public_key = if let Some(email) = email {
+        let record = sqlx::query!( 
+            r#"
+                select public_key
+                from users
+                where email = ? and client_id = ?
+            "#,
+            email, client_id
+        )
+            .fetch_one(&db_pool).await
+            .context("failed to query public key for this email")?;
+
+        let encoded_point = p256::EncodedPoint::from_bytes(record.public_key)
+            .context("failed to decode public key from database")?;
+        p256::AffinePoint::from_encoded_point(&encoded_point).unwrap()
+    } else if let Some(username) = username {
+        let record = sqlx::query!(
+            r#"
+                select public_key
+                from users
+                where username = ? and client_id = ?
+            "#,
+            username, client_id
+        )
+            .fetch_one(&db_pool).await
+            .context("failed to query public key for this username")?;
+
+        let encoded_point = p256::EncodedPoint::from_bytes(record.public_key)
+            .context("failed to decode public key from database")?;
+        p256::AffinePoint::from_encoded_point(&encoded_point).unwrap()
+    } else {
+        return Err(anyhow::anyhow!("missing email or username").into());
+    };
+
+    // TODO: zkp verify
+    let verify = true;
+    // NistP256.verify(&payload, &public_key, &proof, &commitment);
+
+    if verify == true {
+        // TODO
+        todo!("generate token with our custom token format")
+    } else {
+        Ok((
+            StatusCode::UNAUTHORIZED,
+            "proof failed or user doesn't exist"
+        ).into_response())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,10 +216,10 @@ mod tests {
     #[tokio::test]
     async fn register_new_user_unknown_client() -> anyhow::Result<()> {
         let req = Request::builder()
-        .method(http::Method::POST)
-        .uri("/api/v1/users?email=user3@email.com&public_key=zzz")
-        .header(http::header::AUTHORIZATION, "Bearer invalid_secret")
-        .body(axum::body::Body::empty())?;
+            .method(http::Method::POST)
+            .uri("/api/v1/users?email=user3@email.com&public_key=zzz")
+            .header(http::header::AUTHORIZATION, "Bearer invalid_secret")
+            .body(axum::body::Body::empty())?;
     
         let res = build_app().await.oneshot(req).await?;
         let (parts, _) = res.into_parts();
