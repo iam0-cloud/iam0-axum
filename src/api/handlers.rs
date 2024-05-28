@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use axum::http::StatusCode;
 use axum::response::*;
 use axum::routing::*;
@@ -135,10 +137,11 @@ async fn user_login(
         payload 
     }): Query<UserLoginRequest>
 ) -> Result<Response, Error> {
+    let user_id;
     let public_key = if let Some(email) = email {
         let record = sqlx::query!( 
             r#"
-                select public_key
+                select public_key, user_id
                 from users
                 where email = ? and client_id = ?
             "#,
@@ -147,13 +150,15 @@ async fn user_login(
             .fetch_one(&db_pool).await
             .context("failed to query public key for this email")?;
 
+        user_id = record.user_id;
+
         let encoded_point = p256::EncodedPoint::from_bytes(record.public_key)
             .context("failed to decode public key from database")?;
         p256::AffinePoint::from_encoded_point(&encoded_point).unwrap()
     } else if let Some(username) = username {
         let record = sqlx::query!(
             r#"
-                select public_key
+                select public_key, user_id
                 from users
                 where username = ? and client_id = ?
             "#,
@@ -161,6 +166,8 @@ async fn user_login(
         )
             .fetch_one(&db_pool).await
             .context("failed to query public key for this username")?;
+        
+        user_id = record.user_id;
 
         let encoded_point = p256::EncodedPoint::from_bytes(record.public_key)
             .context("failed to decode public key from database")?;
@@ -174,8 +181,34 @@ async fn user_login(
     // NistP256.verify(&payload, &public_key, &proof, &commitment);
 
     if verify == true {
-        // TODO
-        todo!("generate token with our custom token format")
+        // 5 minutes
+        let iat = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap();
+        let exp = iat
+            .as_secs() + 300;
+
+        let payload = serde_json::json!({
+            "iss": user_id,
+            "iat": iat,
+            "exp": exp
+        }).to_string();
+
+        let record = sqlx::query!(
+            r#"
+                select api_key
+                from clients
+                where client_id = ?
+            "#,
+            client_id
+        )
+            .fetch_one(&db_pool).await?;
+
+        let signing_key = p256::ecdsa::SigningKey::from_slice(record.api_key.as_bytes()).unwrap();
+        let verifying_key = p256::ecdsa::VerifyingKey::from(&signing_key);
+        let token = iam0_core::crypto::token::Token::sign(payload, &signing_key);
+
+        todo!()
     } else {
         Ok((
             StatusCode::UNAUTHORIZED,
